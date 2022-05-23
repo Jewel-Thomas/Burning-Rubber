@@ -1,0 +1,207 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class Controller : MonoBehaviour
+{
+    public AudioSource boostAudio;
+    public bool boostPlaying = false;
+    internal enum driveType{
+        frontWheelDrive,
+        rearWheelDrive,
+        allWheelDrive
+    }
+    public float radius = 6;
+
+    public GameObject subaru;    
+
+    [SerializeField] private driveType drive;
+    [SerializeField] private InputManager IM;
+    public Camera mainCamera;
+    [SerializeField] private GameObject centerOfMass;
+    private Rigidbody rigidbody;
+
+    public float KPH;
+    public Camera sideCamera;
+    public float addDownForceValue = 50;
+    public WheelCollider[] wheels = new WheelCollider[4];
+    public GameObject[] wheelMesh = new GameObject[4];
+    public Transform[] wheelMeshTransforms = new Transform[4];
+    public float torque = 0;
+    public float maxSteerAngle = 30;
+    float horizontalInput;
+    public float thrust = 1000f;
+    public float brakePower;
+    float verticalInput;
+    public float[] slip = new float[4];
+    public ParticleSystem boostParticle;
+    // Start is called before the first frame update
+    void Start()
+    {
+        GetObjects();
+    }
+    void Update()
+    {
+        //ChangeCamera();
+        
+        
+    }
+
+    // Update is called once per frame
+    void FixedUpdate()
+    {
+        AnimateWheels();
+        MoveVehicle();
+        SteerVehicle();
+        AddDownForce();   
+        GetFriction();
+    }
+
+    void MoveVehicle()
+    {
+
+        float totalPower;
+        if(drive == driveType.allWheelDrive)
+        {
+            if(IM.verticalInput != 0)
+            {
+                for(int i=0;i<wheels.Length;i++)
+                {
+                    wheels[i].motorTorque = (torque/4) * IM.verticalInput;
+                }
+            }
+        }
+        else if(drive == driveType.rearWheelDrive)
+        {
+            if(IM.verticalInput != 0)
+            {
+                for(int i=2;i<wheels.Length;i++)
+                {
+                    wheels[i].motorTorque = (torque/2) * IM.verticalInput;
+                }
+            }
+        }
+        else 
+        {
+            if(IM.verticalInput != 0)
+            {
+                for(int i=0;i<wheels.Length-2;i++)
+                {
+                    wheels[i].motorTorque = (torque/2) * IM.verticalInput;
+                }
+            }
+        }
+        
+        if(IM.verticalInput == 0)
+        {
+            for(int i=0;i<wheels.Length;i++)
+            {
+                wheels[i].motorTorque = 0;
+            }
+        }
+        KPH = rigidbody.velocity.magnitude * 3.6f;
+
+        if(IM.handBrake)
+        {
+            wheels[2].brakeTorque = wheels[3].brakeTorque = brakePower;
+        }
+        else
+        {
+             wheels[2].brakeTorque = wheels[3].brakeTorque = 0;
+        }
+        if(IM.boosting)
+        {
+            rigidbody.AddForce(transform.forward * thrust);
+            if(!boostAudio.isPlaying)
+            {
+                //boostAudio.Play();
+                boostPlaying = true;
+            }
+            // boostParticle.Play();
+        }
+        if(Input.GetKeyUp(KeyCode.LeftShift))
+        {
+            boostPlaying = false;
+        }
+        // else
+        // {
+        //     boostParticle.Stop();
+        // }    
+    }
+
+    void AddDownForce()
+    {
+        rigidbody.AddForce(-transform.up * addDownForceValue * rigidbody.velocity.magnitude);
+    }
+
+    
+
+    void SteerVehicle()
+    {
+        if(IM.horizontalInput > 0)
+        {
+            wheels[0].steerAngle = Mathf.Rad2Deg * Mathf.Atan(2.55f / (radius + (1.5f/2))) * IM.horizontalInput;
+            wheels[1].steerAngle = Mathf.Rad2Deg * Mathf.Atan(2.55f / (radius - (1.5f/2))) * IM.horizontalInput;
+        }
+        else if(IM.horizontalInput < 0)
+        {
+            wheels[0].steerAngle = Mathf.Rad2Deg * Mathf.Atan(2.55f / (radius - (1.5f/2))) * IM.horizontalInput;
+            wheels[1].steerAngle = Mathf.Rad2Deg * Mathf.Atan(2.55f / (radius + (1.5f/2))) * IM.horizontalInput;
+        }
+        // if(IM.horizontalInput != 0)
+        // {
+        //     for(int i=0;i<wheels.Length-2;i++)
+        //     {
+        //         wheels[i].steerAngle = maxSteerAngle * IM.horizontalInput;
+        //     }
+        // }
+
+        if(IM.horizontalInput == 0)
+        {
+            for(int i=0;i<wheels.Length-2;i++)
+            {
+                wheels[i].steerAngle = 0;
+            }
+        }
+    }
+
+    void ChangeCamera()
+    {
+        if(Input.GetKeyDown(KeyCode.C))
+        {
+            mainCamera.enabled = !mainCamera.enabled;
+            sideCamera.enabled = !sideCamera.enabled;
+        }
+    }
+
+    void AnimateWheels()
+    {
+        Vector3 wheelPosition = Vector3.zero;
+        Quaternion wheelRotation = Quaternion.identity;
+        for(int i=0;i<4;i++)
+        {
+            wheels[i].GetWorldPose(out wheelPosition,out wheelRotation);
+            wheelMesh[i].transform.position = wheelPosition;
+            wheelMesh[i].transform.rotation = wheelRotation;
+        }
+    }
+
+    void GetFriction()
+    {
+        for(int i=0;i<wheels.Length;i++)
+        {
+            WheelHit wheelHit;
+            wheels[i].GetGroundHit(out wheelHit);
+            slip[i] = wheelHit.sidewaysSlip;
+        }
+    }
+    
+
+    void GetObjects()
+    {
+        IM = GetComponent<InputManager>();
+        rigidbody = GetComponent<Rigidbody>();
+        centerOfMass = GameObject.Find("CenterOfMass");
+        rigidbody.centerOfMass = centerOfMass.transform.localPosition;
+    }
+}
