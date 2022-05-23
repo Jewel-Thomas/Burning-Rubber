@@ -1,0 +1,172 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+using UnityEngine.UI;
+using TMPro;
+public class InputManager : MonoBehaviour
+{
+    public TextMeshProUGUI winText;
+    public static bool winnerDecided = false;
+    public bool completedRace = false;
+    public float distance;
+    public Color gizmoColor;
+    public int currentNode;
+    public float completePercent;
+    public float verticalInput;
+    internal enum driver
+    {
+        AI,
+        Player
+    }
+    public bool valueTaken = false;
+
+    public TrackWayPoints wayPoints;
+    [SerializeField] driver driveController;
+    public Transform currentWayPoint;
+    public float horizontalInput;
+    public bool handBrake;
+    public bool boosting;
+    public List<Transform> nodes = new List<Transform>();
+    [Range(0,10)] public int distanceOffset;
+    [Range(0,5)] public float steerForce;
+    // Start is called before the first frame update
+    void Awake()
+    {
+        wayPoints = GameObject.FindGameObjectWithTag("Path").GetComponent<TrackWayPoints>();
+        nodes = wayPoints.nodes;
+    }
+
+    void Update()
+    {
+        switch(driveController)
+        {
+            case driver.Player : {
+                ResetVehicle();
+            }
+            break;
+        }
+        if(completePercent>=100 && !winnerDecided)
+        {
+            Debug.Log(this.gameObject.name + " has won the race!");
+            winText.text = this.gameObject.name + " has won the race!";
+            winnerDecided = true;
+        }
+    }
+
+    // Update is called once per frame
+    void FixedUpdate()
+    {
+       switch(driveController)
+       {
+            case driver.AI : AIDrive();
+                break;
+            case driver.Player: {
+                PlayerDrive();
+            }
+                break;
+       }
+       CalculateDistanceOfWayPoints();
+    }
+
+    private void AIDrive()
+    {
+        if(!valueTaken)
+        {
+            verticalInput = Random.Range(0.65f,1f);
+            valueTaken = true;
+        }
+        AISteer();
+    }
+
+    private void PlayerDrive()
+    {
+        verticalInput = Input.GetAxis("Vertical");
+        horizontalInput = Input.GetAxis("Horizontal");
+        handBrake = (Input.GetAxis("Jump") != 0)? true : false;
+        if(Input.GetKey(KeyCode.LeftShift) && verticalInput>0)
+        {
+            boosting = true;
+            
+        }
+        else
+        {
+            boosting = false;   
+        }
+    }
+
+    private void CalculateDistanceOfWayPoints()
+    {
+        Vector3 position = gameObject.transform.position;
+        if(SceneManager.GetActiveScene() == SceneManager.GetSceneByName("Racing Track"))
+        {
+            distance = Mathf.Infinity;
+        }
+        else
+        {
+            distance = 15;
+        }
+        
+        for(int i=0;i<nodes.Count;i++)
+        {
+            Vector3 difference = nodes[i].transform.position - position;
+          
+            float currentDistance = difference.magnitude;
+            
+            
+            if (currentDistance < distance) {
+                currentNode = i;
+                
+                if ((i + distanceOffset) >= nodes.Count) {
+                    currentWayPoint = nodes[1];
+                    distance = currentDistance;
+                    
+                } else {
+                    currentWayPoint = nodes[i + distanceOffset];
+                    distance = currentDistance;
+                }
+                
+            }
+            if(!completedRace)
+            {
+                completePercent = ((float)currentNode/66)*100;
+            }
+            if(completePercent>=100)
+            {
+                completedRace = true;
+            }
+            
+            
+        }
+    }
+
+    private void AISteer()
+    {
+        Vector3 relative = transform.InverseTransformPoint(currentWayPoint.transform.position);
+        relative /= relative.magnitude;
+
+        horizontalInput = (relative.x/relative.magnitude) * steerForce;
+    }
+
+    private void OnDrawGizmos()
+    {
+        Gizmos.color = gizmoColor;
+        Gizmos.DrawWireSphere(currentWayPoint.position,3);
+    }
+
+    void ResetVehicle()
+    {
+        if(Input.GetKeyDown(KeyCode.R))
+        {
+            transform.Rotate(transform.rotation.x,transform.rotation.y,transform.rotation.z + 180);
+            transform.position = new Vector3(transform.position.x,transform.position.y+1,transform.position.z);
+        }
+    }
+
+    public void ChangeDistance()
+    {
+        distance = Mathf.Infinity;
+    }
+
+    
+}
